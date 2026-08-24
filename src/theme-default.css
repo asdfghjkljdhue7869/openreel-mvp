@@ -1,0 +1,297 @@
+/*
+  OpenReel MVP — default theme.
+  Loosely modeled on Adobe Premiere Pro's dark panel UI: charcoal
+  backgrounds, sharp/flat panels, a cyan-blue accent for active state and
+  the playhead.
+
+  ARCHITECTURE FOR CUSTOM THEMES
+  -------------------------------
+  The whole app layout is one CSS Grid (.app-layout) with NAMED AREAS:
+  header, preview, panels, actions, log. The HTML doesn't hardcode any
+  particular arrangement — a custom theme can move, resize, hide, or
+  reorder any area purely by redeclaring grid-template-areas /
+  grid-template-columns, with zero HTML or JS changes.
+
+  A worked example: a touch/mobile theme just needs to stack everything
+  in one column with bigger tap targets — see the @media block near the
+  bottom of this file for exactly that, ready to copy into your own
+  theme and adjust.
+
+  To make your own theme: copy this file, change whatever you like, host
+  it anywhere reachable by URL, and paste that URL into the "Theme URL"
+  field in the app (or set localStorage key "openreel-theme-url"
+  directly). You never need to paste CSS into the app itself — only a
+  link to it, same idea as Jellyfin's custom-CSS setting.
+*/
+
+:root {
+  --bg-app: #1e1e1e;
+  --bg-panel: #262626;
+  --bg-panel-raised: #2e2e2e;
+  --bg-input: #1a1a1a;
+  --border: #3a3a3a;
+  --text-primary: #e8e8e8;
+  --text-secondary: #999999;
+  --text-dim: #6b6b6b;
+  --accent: #4fc3f7;
+  --accent-strong: #29b6f6;
+  --accent-contrast: #0b1a1f;
+  --danger: #ff6b6b;
+  --success: #6dff9a;
+  --warning: #ffd280;
+  --font-ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Consolas", "SFMono-Regular", Menlo, monospace;
+
+  /* Referenced by .touch-target and form controls — bump this in a
+     custom theme (e.g. to 48-56px) for a more touch-friendly feel
+     without touching any other rule. */
+  --tap-size: 40px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  margin: 0;
+  padding: 20px;
+  font-size: 13px;
+}
+
+/* ============ LAYOUT ============ */
+
+.app-layout {
+  display: grid;
+  gap: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+  grid-template-columns: minmax(320px, 480px) 1fr;
+  grid-template-areas:
+    "header  header"
+    "preview panels"
+    "actions actions"
+    "log     log";
+}
+
+.area-header  { grid-area: header; }
+.area-preview { grid-area: preview; }
+.area-panels  { grid-area: panels; display: flex; flex-direction: column; gap: 12px; }
+.area-actions { grid-area: actions; }
+.area-log     { grid-area: log; }
+
+h1 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  letter-spacing: 0.02em;
+}
+
+.sub {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+/* ============ PANELS ============ */
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 14px;
+}
+
+.panel-title {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 10px 0;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+/* ============ CANVAS ============ */
+
+#canvas {
+  background: black;
+  border: 1px solid var(--border);
+  display: block;
+  margin: 10px 0;
+  width: 100%;
+  height: auto;
+}
+
+/* ============ CONTROLS / FORM ELEMENTS ============ */
+
+.controls {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-grow { flex: 1 1 200px; }
+.field-narrow input { width: 80px; }
+.field-swatch input { width: 44px; padding: 2px; }
+
+.field label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+button {
+  background: var(--bg-panel-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 0 16px;
+  min-height: var(--tap-size);
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  transition: background-color 0.1s, border-color 0.1s;
+}
+button:hover:not(:disabled) {
+  background: #3a3a3a;
+  border-color: var(--accent);
+}
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button:active:not(:disabled) {
+  background: #444;
+}
+button:disabled {
+  color: var(--text-dim);
+  cursor: default;
+  opacity: 0.6;
+}
+button.primary {
+  background: var(--accent-strong);
+  color: var(--accent-contrast);
+  border-color: var(--accent-strong);
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Explicit opt-in class for controls that should always meet a minimum
+   touch target size (44x44 is the common accessibility baseline) even
+   if the default theme's own button height is smaller. Redeclare
+   --tap-size in a custom theme to resize every one of these at once. */
+.touch-target {
+  min-width: var(--tap-size);
+  min-height: var(--tap-size);
+}
+
+input[type=range] {
+  flex: 1 1 200px;
+  min-width: 120px;
+  accent-color: var(--accent);
+  /* Native range inputs have a tiny hit area by default — pad the
+     clickable/tappable height without changing the visual track size. */
+  height: var(--tap-size);
+  cursor: pointer;
+}
+
+input[type=text],
+input[type=number],
+select {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 0 10px;
+  min-height: var(--tap-size);
+  border-radius: 2px;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  width: 100%;
+}
+input[type=text]:focus,
+input[type=number]:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+input[type=file] {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+input[type=color] {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  min-height: var(--tap-size);
+  cursor: pointer;
+}
+
+/* ============ LOG / STATUS ============ */
+
+#log {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+#status {
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border-radius: 2px;
+  display: inline-block;
+  font-weight: 500;
+}
+.idle { background: var(--bg-panel-raised); color: var(--text-secondary); }
+.working { background: #3a2c0d; color: var(--warning); }
+.done { background: #0e2f16; color: var(--success); }
+.error { background: #3a0d0d; color: var(--danger); }
+
+/* ============ MOBILE / TOUCH EXAMPLE ============
+   Worked example of what a touch-first custom theme would change.
+   Copy this whole block (and the --tap-size bump above) as the starting
+   point for your own mobile theme — nothing else in this file needs to
+   change for the app to work, because layout lives entirely in
+   .app-layout's grid-template-areas. */
+@media (max-width: 720px) {
+  :root {
+    --tap-size: 48px; /* bigger fingers need bigger targets */
+  }
+
+  body {
+    padding: 10px;
+    font-size: 15px;
+  }
+
+  .app-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "preview"
+      "panels"
+      "actions"
+      "log";
+  }
+
+  .controls {
+    align-items: stretch;
+  }
+
+  .controls > button,
+  .controls > .field {
+    flex: 1 1 100%;
+  }
+
+  input[type=range] {
+    flex-basis: 100%;
+  }
+}

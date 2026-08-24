@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenReel MVP — Premiere in a Browser</title>
+</head>
+<body>
+  <div class="app-layout">
+
+    <header class="area-header">
+      <h1>OpenReel MVP</h1>
+      <div class="sub">Real engine, no mockups: import → scrub → trim → export, running on @openreel/core.</div>
+    </header>
+
+    <section class="area-preview panel">
+      <input type="file" id="fileInput" accept="video/*">
+      <canvas id="canvas" width="960" height="540"></canvas>
+
+      <div class="controls">
+        <button id="playBtn" disabled class="touch-target">Play</button>
+        <input type="range" id="seekBar" min="0" max="100" value="0" step="0.01" disabled>
+        <span id="timeLabel">0.00s / 0.00s</span>
+      </div>
+    </section>
+
+    <div class="area-panels">
+
+      <section class="panel">
+        <p class="panel-title">Trim</p>
+        <div class="controls">
+          <div class="field field-narrow">
+            <label for="inPoint">In point (s)</label>
+            <input type="number" id="inPoint" step="0.1" min="0" disabled>
+          </div>
+          <div class="field field-narrow">
+            <label for="outPoint">Out point (s)</label>
+            <input type="number" id="outPoint" step="0.1" min="0" disabled>
+          </div>
+          <button id="applyTrimBtn" disabled class="touch-target">Apply Trim</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <p class="panel-title">Titles</p>
+        <div class="controls">
+          <div class="field field-grow">
+            <label for="titleText">Text</label>
+            <input type="text" id="titleText" placeholder="Enter title text…" disabled>
+          </div>
+          <div class="field field-narrow">
+            <label for="titleFontSize">Font size</label>
+            <input type="number" id="titleFontSize" value="48" min="8" max="300" step="1" disabled>
+          </div>
+          <div class="field field-swatch">
+            <label for="titleColor">Color</label>
+            <input type="color" id="titleColor" value="#ffffff" disabled>
+          </div>
+          <div class="field field-narrow">
+            <label for="titleStart">Start (s)</label>
+            <input type="number" id="titleStart" value="0" min="0" step="0.1" disabled>
+          </div>
+          <div class="field field-narrow">
+            <label for="titleDuration">Duration (s)</label>
+            <input type="number" id="titleDuration" value="3" min="0.1" step="0.1" disabled>
+          </div>
+          <button id="addTitleBtn" disabled class="touch-target">Add Title to Timeline</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <p class="panel-title">Theme</p>
+        <div class="controls">
+          <div class="field field-grow">
+            <label for="themeUrlInput">Theme CSS URL</label>
+            <input type="text" id="themeUrlInput" placeholder="https://example.com/my-theme.css">
+          </div>
+          <button id="loadThemeBtn" class="touch-target">Load Theme</button>
+          <button id="resetThemeBtn" class="touch-target">Reset to Default</button>
+        </div>
+      </section>
+
+    </div>
+
+    <section class="area-actions">
+      <div class="controls">
+        <button id="exportBtn" disabled class="primary touch-target">Export MP4</button>
+        <button id="resetBtn" class="touch-target">Reset (free memory)</button>
+        <span id="status" class="idle">Waiting for a video…</span>
+      </div>
+    </section>
+
+    <section class="area-log">
+      <div id="log"></div>
+    </section>
+
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
