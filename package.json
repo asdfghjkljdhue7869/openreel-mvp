@@ -1,0 +1,35 @@
+{
+  "name": "openreel-mvp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/three": "^0.182.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "@ffmpeg/core": "^0.12.6",
+    "@ffmpeg/core-mt": "^0.12.6",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
+    "@mediapipe/tasks-vision": "^0.10.35",
+    "@paper-design/shaders": "^0.0.76",
+    "gsap": "^3.15.0",
+    "idb-keyval": "^6.3.0",
+    "immer": "^11.1.18",
+    "mediabunny": "^1.55.1",
+    "polygon-clipping": "^0.15.7",
+    "three": "^0.182.0",
+    "uuid": "^13.0.2"
+  }
+}

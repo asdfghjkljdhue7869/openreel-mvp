@@ -1,0 +1,27 @@
+--- src/export/export-engine.ts
++++ src/export/export-engine.ts
+@@ -304,12 +324,18 @@ export class ExportEngine {
+         let frameImage = rendered.image;
+ 
+         if (shouldUpscale && this.upscalingEngine?.isInitialized()) {
+-          const upscaled = await this.upscalingEngine.upscaleImageBitmap(
+-            frameImage,
+-            fullSettings.width,
+-            fullSettings.height,
+-            fullSettings.upscaling!,
+-          );
++          let upscaled: ImageBitmap;
++          try {
++            upscaled = await this.upscalingEngine.upscaleImageBitmap(
++              frameImage,
++              fullSettings.width,
++              fullSettings.height,
++              fullSettings.upscaling!,
++            );
++          } catch (upscaleError) {
++            frameImage.close();
++            throw upscaleError;
++          }
+           frameImage.close();
+           frameImage = upscaled;
+         }

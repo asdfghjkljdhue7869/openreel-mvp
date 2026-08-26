@@ -1,0 +1,27 @@
+--- src/export/export-engine.test.ts
++++ src/export/export-engine.test.ts
+@@ -522,13 +522,23 @@ describe("ExportEngine", () => {
+ 
+       await drainVideoExport();
+ 
++      // Call 1 is the new resolution-capability probe added so exports
++      // aren't clamped to a hardcoded 4K ceiling when the browser's real
++      // encoder can actually handle more — it has no hardwareAcceleration
++      // field, so the mock's condition above treats it like "no-preference"
++      // and resolves it non-null.
+       expect(mockGetFirstEncodableVideoCodec).toHaveBeenNthCalledWith(
+         1,
++        ["avc"],
++        expect.objectContaining({ width: 640, height: 360, framerate: 1 }),
++      );
++      expect(mockGetFirstEncodableVideoCodec).toHaveBeenNthCalledWith(
++        2,
+         ["avc", "hevc"],
+         expect.objectContaining({ hardwareAcceleration: "prefer-hardware" }),
+       );
+       expect(mockGetFirstEncodableVideoCodec).toHaveBeenNthCalledWith(
+-        2,
++        3,
+         ["avc", "hevc"],
+         expect.objectContaining({ hardwareAcceleration: "no-preference" }),
+       );

@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@openreel/core": ["./src/core-lib/src/index.ts"],
+      "@openreel/core/*": ["./src/core-lib/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/core-lib/**/*.test.ts",
+    "src/core-lib/src/test/**",
+    "src/core-lib/src/wasm/**/assembly/**",
+    "src/core-lib/vitest.config.ts"
+  ]
+}
