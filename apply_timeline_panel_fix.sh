@@ -1,3 +1,5 @@
+mkdir -p src
+cat > src/timeline-ui.ts <<'OPENREEL_APPLY_EOF'
 import type { Project, Track, Clip, TextClip, Action } from "@openreel/core";
 import {
   ActionExecutor,
@@ -295,14 +297,13 @@ export class TimelineUI {
       tracksEl.innerHTML = "";
       return;
     }
-    const project = this.project;
 
     const duration = this.getTimelineDuration();
     const width = duration * this.pixelsPerSecond;
     tracksEl.innerHTML = "";
     tracksEl.style.position = "relative";
 
-    project.timeline.tracks.forEach((track, index) => {
+    this.project.timeline.tracks.forEach((track, index) => {
       const trackEl = document.createElement("div");
       trackEl.className = "timeline-track" + (index % 2 === 1 ? " alt" : "");
 
@@ -375,17 +376,6 @@ export class TimelineUI {
         }
       } else {
         for (const clip of track.clips) {
-          const mediaItem = project.mediaLibrary.items.find((m) => m.id === clip.mediaId);
-          const waveformBars =
-            mediaItem?.waveformData && mediaItem.waveformData.length > 0 && mediaItem.metadata.duration > 0
-              ? this.computeWaveformBars(
-                  mediaItem.waveformData,
-                  mediaItem.metadata.duration,
-                  clip.inPoint,
-                  clip.outPoint,
-                  clip.duration * this.pixelsPerSecond,
-                )
-              : undefined;
           lane.appendChild(
             this.renderClipElement({
               id: clip.id,
@@ -398,7 +388,6 @@ export class TimelineUI {
               locked: track.locked,
               inPoint: clip.inPoint,
               outPoint: clip.outPoint,
-              waveformBars,
             }),
           );
         }
@@ -443,36 +432,6 @@ export class TimelineUI {
     return btn;
   }
 
-  private computeWaveformBars(
-    peaks: Float32Array,
-    sourceDuration: number,
-    inPoint: number,
-    outPoint: number,
-    widthPx: number,
-  ): number[] {
-    // The engine's waveform analysis always scans the FULL source file at a
-    // fixed sample rate, but MediaItem only keeps the raw peaks array (the
-    // sample rate itself doesn't survive the ProcessedMedia -> MediaItem
-    // conversion) — so peaks[i] maps proportionally across [0, sourceDuration]
-    // rather than at a known fixed rate. Good enough for a visual indicator.
-    if (sourceDuration <= 0 || peaks.length === 0) return [];
-    const startIdx = Math.max(0, Math.floor((inPoint / sourceDuration) * peaks.length));
-    const endIdx = Math.min(peaks.length, Math.ceil((outPoint / sourceDuration) * peaks.length));
-    const sliceLen = Math.max(1, endIdx - startIdx);
-    const barCount = Math.max(1, Math.min(240, Math.floor(widthPx / 2)));
-    const bars: number[] = [];
-    for (let i = 0; i < barCount; i++) {
-      const from = startIdx + Math.floor((i / barCount) * sliceLen);
-      const to = Math.max(from + 1, startIdx + Math.floor(((i + 1) / barCount) * sliceLen));
-      let peak = 0;
-      for (let j = from; j < to && j < endIdx; j++) {
-        peak = Math.max(peak, Math.abs(peaks[j] ?? 0));
-      }
-      bars.push(Math.min(1, peak));
-    }
-    return bars;
-  }
-
   private renderClipElement(opts: {
     id: string;
     trackId: string;
@@ -484,7 +443,6 @@ export class TimelineUI {
     locked: boolean;
     inPoint?: number;
     outPoint?: number;
-    waveformBars?: number[];
   }): HTMLElement {
     const el = document.createElement("div");
     el.className =
@@ -495,10 +453,6 @@ export class TimelineUI {
     el.dataset.clipId = opts.id;
     el.style.left = `${opts.startTime * this.pixelsPerSecond}px`;
     el.style.width = `${Math.max(opts.duration, MIN_CLIP_SECONDS) * this.pixelsPerSecond}px`;
-
-    if (opts.waveformBars && opts.waveformBars.length > 0) {
-      el.appendChild(this.buildWaveformSvg(opts.waveformBars));
-    }
 
     const labelEl = document.createElement("span");
     labelEl.className = "timeline-clip-label";
@@ -534,24 +488,6 @@ export class TimelineUI {
     return el;
   }
 
-  private buildWaveformSvg(bars: number[]): SVGSVGElement {
-    const svgNS = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(svgNS, "svg") as unknown as SVGSVGElement;
-    svg.setAttribute("class", "timeline-clip-waveform");
-    svg.setAttribute("viewBox", `0 0 ${bars.length} 100`);
-    svg.setAttribute("preserveAspectRatio", "none");
-    bars.forEach((amp, i) => {
-      const h = Math.max(6, amp * 92);
-      const rect = document.createElementNS(svgNS, "rect");
-      rect.setAttribute("x", String(i));
-      rect.setAttribute("y", String(50 - h / 2));
-      rect.setAttribute("width", "0.7");
-      rect.setAttribute("height", String(h));
-      svg.appendChild(rect);
-    });
-    return svg;
-  }
-
   private updatePlayheadOnly(): void {
     const left = this.currentTime * this.pixelsPerSecond;
 
@@ -559,41 +495,12 @@ export class TimelineUI {
     if (!playhead) {
       playhead = document.createElement("div");
       playhead.className = "timeline-playhead";
-      playhead.addEventListener("pointerdown", (e) => this.onPlayheadPointerDown(e));
       this.elements.tracks.appendChild(playhead);
     }
     playhead.style.left = `${left}px`;
     playhead.style.height = `${this.elements.tracks.scrollHeight}px`;
 
-    // A live timecode riding along at the playhead itself — so you can
-    // read the current time where you're actually looking, not just in
-    // the toolbar off to the side.
-    let liveTime = this.elements.ruler.querySelector<HTMLElement>(".timeline-ruler-live-time");
-    if (!liveTime) {
-      liveTime = document.createElement("div");
-      liveTime.className = "timeline-ruler-live-time";
-      this.elements.ruler.appendChild(liveTime);
-    }
-    liveTime.style.left = `${left}px`;
-    liveTime.textContent = formatTimecode(this.currentTime, 30).slice(0, 8);
-
     this.elements.timecode.textContent = formatTimecode(this.currentTime, 30);
-  }
-
-  private onPlayheadPointerDown(e: PointerEvent): void {
-    e.preventDefault();
-    e.stopPropagation();
-    const onMove = (moveEvent: PointerEvent) => {
-      const rect = this.elements.ruler.getBoundingClientRect();
-      const x = moveEvent.clientX - rect.left;
-      this.callbacks.onSeek(Math.max(0, x / this.pixelsPerSecond));
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
   }
 
   private onRulerPointerDown(e: PointerEvent): void {
@@ -1183,3 +1090,5 @@ export class TimelineUI {
     });
   }
 }
+OPENREEL_APPLY_EOF
+echo "openreel-mvp: fixed context panel being torn down every animation frame during playback."

@@ -264,6 +264,14 @@ input[type=color] {
    custom theme restyles the timeline for free just by overriding those
    variables — no timeline-specific overrides needed unless you want them. */
 
+:root {
+  /* Extra vars for the timeline only — still theme-overridable, but kept
+     separate from the core palette above since a custom theme may want
+     a different accent for text clips without touching --accent itself. */
+  --text-clip-accent: #c792ea;
+  --track-alt-tint: rgba(255, 255, 255, 0.025);
+}
+
 .timeline {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -277,13 +285,83 @@ input[type=color] {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.timeline-toolbar-spacer {
+  flex: 1 1 auto;
 }
 
 .timeline-toolbar .timecode {
   font-family: var(--font-mono);
   font-size: 0.78rem;
   color: var(--text-secondary);
-  margin-left: auto;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 4px 8px;
+}
+
+.timeline-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.timeline-zoom button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.timeline-zoom input[type="range"] {
+  width: 100px;
+  min-width: 80px;
+  flex: 0 0 auto;
+  height: 28px;
+}
+
+#timelineUndoBtn,
+#timelineRedoBtn {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 1rem;
+}
+
+/* ---- Contextual row: selected-clip properties / add-title form ---- */
+
+.timeline-context {
+  display: none;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-panel-raised);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.timeline-context.visible {
+  display: block;
+}
+
+.timeline-context-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.timeline-context-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: 8px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .timeline-scroll {
@@ -296,9 +374,9 @@ input[type=color] {
 
 .timeline-ruler {
   position: relative;
-  height: 22px;
+  height: 24px;
   border-bottom: 1px solid var(--border);
-  cursor: pointer;
+  cursor: text;
   background: var(--bg-panel-raised);
 }
 
@@ -311,8 +389,8 @@ input[type=color] {
 
 .timeline-ruler-tick-label {
   position: absolute;
-  top: 2px;
-  left: 3px;
+  top: 3px;
+  left: 4px;
   font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--text-dim);
@@ -332,23 +410,35 @@ input[type=color] {
   border-bottom: none;
 }
 
+.timeline-track.alt .timeline-track-lane {
+  background: var(--track-alt-tint);
+}
+
 .timeline-track-header {
   position: sticky;
   left: 0;
   z-index: 2;
-  width: 96px;
-  flex: 0 0 96px;
+  width: 132px;
+  flex: 0 0 132px;
   background: var(--bg-panel-raised);
   border-right: 1px solid var(--border);
-  padding: 4px 6px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
+}
+
+.timeline-track-name-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .timeline-track-name {
-  font-size: 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -356,27 +446,35 @@ input[type=color] {
 }
 
 .timeline-track-type {
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  flex: 0 0 auto;
 }
 
-.timeline-track-toggles {
+.timeline-track-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
-  margin-top: 2px;
 }
 
 .timeline-track-toggle {
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   line-height: 1;
-  padding: 2px 4px;
+  padding: 4px 6px;
   border: 1px solid var(--border);
   border-radius: 2px;
-  background: transparent;
+  background: var(--bg-input);
   color: var(--text-dim);
   cursor: pointer;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.timeline-track-toggle:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: #3a3a3a;
 }
 
 .timeline-track-toggle.active {
@@ -386,86 +484,183 @@ input[type=color] {
 }
 
 .timeline-track-add-clip {
-  margin-top: 4px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   text-align: center;
+  font-size: 0.68rem;
+  padding: 4px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: var(--bg-input);
+  color: var(--accent);
+  cursor: pointer;
+  min-height: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-track-add-clip:hover {
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .timeline-track-lane {
   position: relative;
-  height: 44px;
+  height: 60px;
   flex: 1 1 auto;
+  cursor: text;
+  transition: background-color 0.1s;
 }
 
 .timeline-clip {
   position: absolute;
-  top: 3px;
-  bottom: 3px;
-  border-radius: 2px;
-  background: var(--accent);
+  top: 4px;
+  bottom: 4px;
+  touch-action: none;
+  border-radius: 3px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white 8%), var(--accent-strong));
   border: 1px solid var(--accent-strong);
   color: var(--accent-contrast);
-  font-size: 0.68rem;
-  padding: 3px 6px;
+  font-size: 0.7rem;
+  padding: 4px 7px;
+  overflow: hidden;
+  cursor: grab;
+  box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: filter 0.1s, box-shadow 0.1s;
+}
+
+.timeline-clip:hover {
+  filter: brightness(1.08);
+}
+
+.timeline-clip-label {
+  display: block;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  cursor: grab;
-  box-sizing: border-box;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  pointer-events: none;
 }
 
 .timeline-clip.dragging {
   cursor: grabbing;
-  opacity: 0.85;
+  opacity: 0.88;
   z-index: 3;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
 }
 
 .timeline-clip.selected {
   outline: 2px solid var(--text-primary);
   outline-offset: -1px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-primary) 25%, transparent), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-clip.locked {
+  cursor: not-allowed;
+  filter: saturate(0.4) brightness(0.8);
 }
 
 .timeline-clip[data-track-type="audio"] {
-  background: var(--success);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--success) 92%, white 8%), var(--success));
   border-color: var(--success);
   color: #06210f;
 }
 
 .timeline-clip[data-track-type="image"] {
-  background: var(--warning);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--warning) 92%, white 8%), var(--warning));
   border-color: var(--warning);
   color: #2b1d00;
+}
+
+.timeline-clip-text,
+.timeline-clip[data-track-type="text"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--text-clip-accent) 92%, white 8%), var(--text-clip-accent));
+  border-color: var(--text-clip-accent);
+  color: #1e0d29;
+}
+
+.timeline-clip-text .timeline-clip-label {
+  font-style: italic;
 }
 
 .timeline-clip-handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 7px;
   cursor: ew-resize;
+  touch-action: none;
 }
 
-.timeline-clip-handle.left  { left: 0; }
-.timeline-clip-handle.right { right: 0; }
+.timeline-clip-handle:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.timeline-clip-handle.left  { left: 0; border-radius: 3px 0 0 3px; }
+.timeline-clip-handle.right { right: 0; border-radius: 0 3px 3px 0; }
 
 .timeline-playhead {
   position: absolute;
   top: 0;
   bottom: 0;
+  width: 9px;
+  margin-left: -4px;
+  z-index: 4;
+  cursor: ew-resize;
+}
+
+.timeline-playhead::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
   width: 1px;
   background: var(--danger);
-  z-index: 4;
-  pointer-events: none;
+  box-shadow: 0 0 4px color-mix(in srgb, var(--danger) 60%, transparent);
 }
 
 .timeline-playhead::before {
   content: "";
   position: absolute;
   top: 0;
-  left: -4px;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--danger);
+  left: -1px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--danger);
+}
+
+.timeline-ruler-live-time {
+  position: absolute;
+  top: 1px;
+  transform: translateX(2px);
+  background: var(--danger);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1.3;
+  padding: 0 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.timeline-clip-waveform {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.timeline-clip-waveform rect {
+  fill: currentColor;
 }
 
 /* ============ MOBILE / TOUCH EXAMPLE ============
@@ -506,5 +701,52 @@ input[type=color] {
 
   input[type=range] {
     flex-basis: 100%;
+  }
+
+  .timeline-zoom input[type="range"] {
+    width: 70px;
+    min-width: 60px;
+  }
+
+  .timeline-context-row {
+    align-items: stretch;
+  }
+
+  .timeline-context-row > .field,
+  .timeline-context-row > button {
+    flex: 1 1 100%;
+  }
+
+  /* The timeline's own small controls (trim handles, mute/lock, add-clip)
+     are sized for a mouse pointer by default — a 7px handle or a 20px
+     icon button is much too small to reliably grab with a finger. Bump
+     them all up under the same breakpoint as the rest of the touch
+     layout, and give the lane back some of the width the header was
+     taking on a narrow phone screen. */
+  .timeline-track-header {
+    width: 96px;
+    flex: 0 0 96px;
+  }
+
+  .timeline-track-name {
+    font-size: 0.68rem;
+  }
+
+  .timeline-track-type {
+    display: none;
+  }
+
+  .timeline-track-toggle,
+  .timeline-track-add-clip {
+    min-height: 32px;
+    padding: 6px 5px;
+  }
+
+  .timeline-clip-handle {
+    width: 16px;
+  }
+
+  .timeline-track-lane {
+    height: 64px;
   }
 }
