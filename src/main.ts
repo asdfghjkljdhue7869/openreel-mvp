@@ -2,6 +2,7 @@ import {
   getMediaImportService,
   createTrack,
   createClip,
+  calculateProjectDuration,
   type Project,
   type Track,
   type Clip,
@@ -155,6 +156,14 @@ const timelineUI = new TimelineUI(
         text,
         style: { ...DEFAULT_TEXT_STYLE, fontSize, color },
       });
+      // Titles live in titleEngine, not project.timeline.tracks, so the
+      // executor-driven duration recompute never sees them. Sync them into
+      // project.textClips and recompute here too, or a trailing title never
+      // extends the seek bar / transport duration past the last video clip.
+      project = { ...project, textClips: titleEngine.getAllTextClips() };
+      project = { ...project, timeline: { ...project.timeline, duration: calculateProjectDuration(project) } };
+      sourceDuration = project.timeline.duration;
+      seekBar.max = String(sourceDuration);
       playback?.setProject(project);
       refreshTextClips();
       log(`Title added: "${text}" at ${start.toFixed(2)}s for ${duration.toFixed(2)}s (clip id ${textClip.id}).`);
@@ -162,18 +171,52 @@ const timelineUI = new TimelineUI(
     onUpdateTextClip: (id, updates) => {
       const updated = titleEngine.updateTextClip(id, updates);
       if (!project || !updated) return;
+      project = { ...project, textClips: titleEngine.getAllTextClips() };
+      project = { ...project, timeline: { ...project.timeline, duration: calculateProjectDuration(project) } };
+      sourceDuration = project.timeline.duration;
+      seekBar.max = String(sourceDuration);
       playback?.setProject(project);
       refreshTextClips();
+      log(
+        `[timeline] Title ${id} updated: start=${updated.startTime.toFixed(2)}s duration=${updated.duration.toFixed(2)}s`,
+      );
     },
     onDeleteTitle: (id) => {
       titleEngine.deleteTextClip(id);
-      if (project) playback?.setProject(project);
+      if (project) {
+        project = { ...project, textClips: titleEngine.getAllTextClips() };
+        project = { ...project, timeline: { ...project.timeline, duration: calculateProjectDuration(project) } };
+        sourceDuration = project.timeline.duration;
+        seekBar.max = String(sourceDuration);
+        playback?.setProject(project);
+      }
       refreshTextClips();
       log(`Title ${id} deleted.`);
     },
     onActionError: (message) => log(`Timeline action failed: ${message}`),
   },
 );
+
+window.addEventListener("resize", () => {
+  timelineUI.render();
+});
+
+function forceRepaint(): void {
+  const el = document.body;
+  const prevDisplay = el.style.display;
+  el.style.display = "none";
+  void el.offsetHeight;
+  el.style.display = prevDisplay;
+  window.scrollBy(0, 1);
+  window.scrollBy(0, -1);
+}
+
+for (const eventName of ["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "MSFullscreenChange"]) {
+  document.addEventListener(eventName, () => {
+    forceRepaint();
+    timelineUI.render();
+  });
+}
 
 addVideoTrackBtn.addEventListener("click", () => timelineUI.addTrack("video"));
 addAudioTrackBtn.addEventListener("click", () => timelineUI.addTrack("audio"));
@@ -207,7 +250,7 @@ async function importClipToTrack(trackId: string) {
       await importService.initialize();
       const result = await importService.importMedia(file, {
         generateThumbnails: false,
-        generateWaveform: true,
+        generateWaveform: false,
       });
       if (!result.success || !result.media) {
         log(`Import failed: ${result.error ?? "unknown error"}`);
@@ -244,6 +287,44 @@ async function importClipToTrack(trackId: string) {
       log(
         `Added "${file.name}" to "${targetTrack.name}" at ${lastEnd.toFixed(2)}s (duration ${clipDuration.toFixed(2)}s).`,
       );
+
+      // Waveform analysis scans the whole file and used to run inline
+      // above (generateWaveform: true), blocking this handler on every
+      // import. Run it in the background instead so import stays fast,
+      // and only apply the result if this media item is still around by
+      // the time it finishes (a later import could have replaced it).
+      const waveformMediaId = mediaItem.id;
+      importService
+        .generateWaveformForMedia(file, 100)
+        .then((waveform) => {
+          if (!waveform || !project) return;
+          if (!project.mediaLibrary.items.some((item) => item.id === waveformMediaId)) return;
+          project = {
+            ...project,
+            mediaLibrary: {
+              items: project.mediaLibrary.items.map((item) =>
+                item.id === waveformMediaId ? { ...item, waveformData: waveform.peaks } : item,
+              ),
+            },
+          };
+          timelineUI.setProject(project);
+          let peakMin = Infinity;
+          let peakMax = -Infinity;
+          let peakSum = 0;
+          for (let i = 0; i < waveform.peaks.length; i++) {
+            const v = waveform.peaks[i];
+            if (v < peakMin) peakMin = v;
+            if (v > peakMax) peakMax = v;
+            peakSum += v;
+          }
+          const peakAvg = waveform.peaks.length > 0 ? peakSum / waveform.peaks.length : 0;
+          log(
+            `Waveform ready. peaks: min=${peakMin.toFixed(4)} max=${peakMax.toFixed(4)} avg=${peakAvg.toFixed(4)} count=${waveform.peaks.length}`,
+          );
+        })
+        .catch((e) => {
+          log(`Waveform generation failed (clip plays fine, just no waveform): ${e instanceof Error ? e.message : String(e)}`);
+        });
     } catch (e) {
       log(`Error importing clip: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -301,14 +382,15 @@ fileInput.addEventListener("change", async () => {
   try {
     const importService = getMediaImportService();
     await importService.initialize();
-    // Thumbnails aren't shown anywhere in this UI yet, so those stay off —
-    // but the timeline now renders a waveform on every clip, so waveform
-    // analysis (100 samples/sec across the file) needs to run at import
-    // time. This does add real time on longer files.
+    // Thumbnails aren't shown anywhere in this UI yet, so those stay off.
+    // Waveform analysis also stays off here — it scans the whole file and
+    // used to run inline, blocking this handler on every import. It's
+    // kicked off in the background further below instead, once import
+    // itself has already finished and the clip is usable.
     const importStart = performance.now();
     const result = await importService.importMedia(file, {
       generateThumbnails: false,
-      generateWaveform: true,
+      generateWaveform: false,
     });
     const importMs = performance.now() - importStart;
 
@@ -394,6 +476,39 @@ fileInput.addEventListener("change", async () => {
     await playback!.seek(0);
     setStatus("Ready", "done");
     log("Timeline built: 1 track, 1 clip. Ready to play, trim, and export.");
+
+    const waveformMediaId = mediaId;
+    importService
+      .generateWaveformForMedia(file, 100)
+      .then((waveform) => {
+        if (!waveform || !project) return;
+        if (!project.mediaLibrary.items.some((item) => item.id === waveformMediaId)) return;
+        project = {
+          ...project,
+          mediaLibrary: {
+            items: project.mediaLibrary.items.map((item) =>
+              item.id === waveformMediaId ? { ...item, waveformData: waveform.peaks } : item,
+            ),
+          },
+        };
+        timelineUI.setProject(project);
+        let peakMin = Infinity;
+        let peakMax = -Infinity;
+        let peakSum = 0;
+        for (let i = 0; i < waveform.peaks.length; i++) {
+          const v = waveform.peaks[i];
+          if (v < peakMin) peakMin = v;
+          if (v > peakMax) peakMax = v;
+          peakSum += v;
+        }
+        const peakAvg = waveform.peaks.length > 0 ? peakSum / waveform.peaks.length : 0;
+        log(
+          `Waveform ready. peaks: min=${peakMin.toFixed(4)} max=${peakMax.toFixed(4)} avg=${peakAvg.toFixed(4)} count=${waveform.peaks.length}`,
+        );
+      })
+      .catch((e) => {
+        log(`Waveform generation failed (clip plays fine, just no waveform): ${e instanceof Error ? e.message : String(e)}`);
+      });
 
     cancelAnimationFrame(rafHandle);
     tickTimeDisplay();

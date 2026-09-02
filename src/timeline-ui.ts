@@ -90,6 +90,10 @@ function makeAction(type: string, params: Record<string, unknown>): Action {
 
 export class TimelineUI {
   private project: Project | null = null;
+
+  private getProjectFrameRate(): number {
+    return this.project?.settings.frameRate ?? 30;
+  }
   private textClips: TextClip[] = [];
   private currentTime = 0;
   private pixelsPerSecond = DEFAULT_ZOOM;
@@ -107,6 +111,11 @@ export class TimelineUI {
     private readonly callbacks: TimelineUICallbacks,
   ) {
     this.elements.ruler.addEventListener("pointerdown", (e) => this.onRulerPointerDown(e));
+    this.elements.ruler.addEventListener("click", (e) => this.onRulerPointerDown(e));
+    this.elements.ruler.addEventListener("pointermove", (e) => this.onTimelineHover(e));
+    this.elements.ruler.addEventListener("pointerleave", () => this.hideHoverTime());
+    this.elements.tracks.addEventListener("pointermove", (e) => this.onTimelineHover(e));
+    this.elements.tracks.addEventListener("pointerleave", () => this.hideHoverTime());
     this.elements.zoomSlider.min = String(MIN_ZOOM);
     this.elements.zoomSlider.max = String(MAX_ZOOM);
     this.elements.zoomSlider.step = "10";
@@ -221,6 +230,72 @@ export class TimelineUI {
     this.callbacks.onLog?.(`[timeline] ${message}`);
   }
 
+  // Split (clip/split in action-executor.ts) trusts whatever `time` it's
+  // given with no bounds-checking of its own — if that time is ever even
+  // slightly outside the target clip's [startTime, startTime+duration)
+  // range when the action actually runs, it silently produces a
+  // zero/negative-duration clip or an overlapping pair rather than
+  // erroring. Log the full resulting track state after every split so a
+  // "weird" split has concrete before/after numbers instead of a guess.
+  // Same idea as logSplitResult but reusable after any track-mutating
+  // action (move, trim) — a move that only repositions one piece of a
+  // previously-split clip can silently open a gap or overlap the next
+  // clip, which looks "weird" in the UI with no obvious cause otherwise.
+  private logTrackState(trackId: string, label: string): void {
+    if (!this.project) return;
+    const track = this.project.timeline.tracks.find((t) => t.id === trackId);
+    if (!track) return;
+    const clips = [...track.clips].sort((a, b) => a.startTime - b.startTime);
+    const parts = clips.map((c) => {
+      const end = c.startTime + c.duration;
+      const flag = c.duration <= 0.001 ? " ZERO/NEGATIVE-DURATION" : "";
+      return (
+        `${c.id.slice(0, 8)}[start=${c.startTime.toFixed(3)} dur=${c.duration.toFixed(3)} ` +
+        `end=${end.toFixed(3)} in=${c.inPoint.toFixed(3)} out=${c.outPoint.toFixed(3)}]${flag}`
+      );
+    });
+    let anomalies = "";
+    for (let i = 1; i < clips.length; i++) {
+      const prevEnd = clips[i - 1].startTime + clips[i - 1].duration;
+      const gap = clips[i].startTime - prevEnd;
+      if (Math.abs(gap) > 0.001) {
+        anomalies += ` GAP/OVERLAP ${gap.toFixed(3)}s between ${clips[i - 1].id.slice(0, 8)} and ${clips[i].id.slice(0, 8)}.`;
+      }
+    }
+    this.log(
+      `${label} -> track ${trackId.slice(0, 8)} now has ${clips.length} clip(s): ${parts.join(" | ")}${anomalies}`,
+    );
+  }
+
+  private logSplitResult(trackId: string, requestedTime: number): void {
+    if (!this.project) return;
+    const track = this.project.timeline.tracks.find((t) => t.id === trackId);
+    if (!track) {
+      this.log(`Split at t=${requestedTime.toFixed(3)}s: track ${trackId.slice(0, 8)} not found after split.`);
+      return;
+    }
+    const clips = [...track.clips].sort((a, b) => a.startTime - b.startTime);
+    const parts = clips.map((c) => {
+      const end = c.startTime + c.duration;
+      const flag = c.duration <= 0.001 ? " ZERO/NEGATIVE-DURATION" : "";
+      return (
+        `${c.id.slice(0, 8)}[start=${c.startTime.toFixed(3)} dur=${c.duration.toFixed(3)} ` +
+        `end=${end.toFixed(3)} in=${c.inPoint.toFixed(3)} out=${c.outPoint.toFixed(3)}]${flag}`
+      );
+    });
+    let anomalies = "";
+    for (let i = 1; i < clips.length; i++) {
+      const prevEnd = clips[i - 1].startTime + clips[i - 1].duration;
+      const gap = clips[i].startTime - prevEnd;
+      if (Math.abs(gap) > 0.001) {
+        anomalies += ` GAP/OVERLAP ${gap.toFixed(3)}s between ${clips[i - 1].id.slice(0, 8)} and ${clips[i].id.slice(0, 8)}.`;
+      }
+    }
+    this.log(
+      `Split requested at t=${requestedTime.toFixed(3)}s -> track ${trackId.slice(0, 8)} now has ${clips.length} clip(s): ${parts.join(" | ")}${anomalies}`,
+    );
+  }
+
   private updateUndoRedoButtons(): void {
     this.elements.undoBtn.disabled = !this.history.canUndo();
     this.elements.redoBtn.disabled = !this.history.canRedo();
@@ -271,7 +346,7 @@ export class TimelineUI {
   private renderRuler(): void {
     const duration = this.getTimelineDuration();
     const width = duration * this.pixelsPerSecond;
-    this.elements.ruler.style.width = `${width}px`;
+    this.elements.ruler.style.width = `${this.headerWidthPx + width}px`;
     this.elements.ruler.innerHTML = "";
 
     // Denser grids at high zoom would produce unreadable, overlapping
@@ -280,10 +355,10 @@ export class TimelineUI {
     for (let t = 0; t <= duration; t += step) {
       const tick = document.createElement("div");
       tick.className = "timeline-ruler-tick";
-      tick.style.left = `${t * this.pixelsPerSecond}px`;
+      tick.style.left = `${this.headerWidthPx + t * this.pixelsPerSecond}px`;
       const label = document.createElement("span");
       label.className = "timeline-ruler-tick-label";
-      label.textContent = formatTimecode(t, 30).slice(0, 8);
+      label.textContent = formatTimecode(t, this.getProjectFrameRate()).slice(0, 8);
       tick.appendChild(label);
       this.elements.ruler.appendChild(tick);
     }
@@ -301,6 +376,7 @@ export class TimelineUI {
     const width = duration * this.pixelsPerSecond;
     tracksEl.innerHTML = "";
     tracksEl.style.position = "relative";
+    tracksEl.style.width = `${this.headerWidthPx + width}px`;
 
     project.timeline.tracks.forEach((track, index) => {
       const trackEl = document.createElement("div");
@@ -353,7 +429,22 @@ export class TimelineUI {
       lane.className = "timeline-track-lane";
       lane.style.width = `${width}px`;
       lane.addEventListener("pointerdown", (e) => {
-        if (e.target !== lane) return;
+        if (e.target !== lane) {
+          this.log(
+            `[scrub] lane pointerdown ignored — target was <${(e.target as HTMLElement)?.tagName ?? "?"} class="${(e.target as HTMLElement)?.className ?? "?"}">, not the lane itself`,
+          );
+          return;
+        }
+        this.clearSelection();
+        this.onScrubPointerDown(e);
+      });
+      lane.addEventListener("click", (e) => {
+        if (e.target !== lane) {
+          this.log(
+            `[scrub] lane click ignored — target was <${(e.target as HTMLElement)?.tagName ?? "?"} class="${(e.target as HTMLElement)?.className ?? "?"}">, not the lane itself`,
+          );
+          return;
+        }
         this.clearSelection();
         this.onScrubPointerDown(e);
       });
@@ -470,6 +561,17 @@ export class TimelineUI {
       }
       bars.push(Math.min(1, peak));
     }
+    // Real-world audio rarely hits absolute peak amplitude 1.0 — rendering
+    // bars against that fixed scale meant anything short of already-hot
+    // audio looked like a flat row of minimum-height dashes. Normalize
+    // against this slice's own loudest sample instead, so the waveform
+    // always uses the full visual range regardless of source loudness.
+    const maxBar = bars.reduce((m, b) => Math.max(m, b), 0);
+    if (maxBar > 0.0001) {
+      for (let i = 0; i < bars.length; i++) {
+        bars[i] = bars[i] / maxBar;
+      }
+    }
     return bars;
   }
 
@@ -552,8 +654,15 @@ export class TimelineUI {
     return svg;
   }
 
+  // Must match .timeline-track-header's CSS width (theme-default.css) —
+  // the playhead line is appended to .timeline-tracks directly, not to a
+  // lane, so unlike clip elements (positioned relative to their own lane,
+  // which already starts past the header) it needs this added explicitly
+  // or it renders 132px left of the clip content it's pointing at.
+  private readonly headerWidthPx = 132;
+
   private updatePlayheadOnly(): void {
-    const left = this.currentTime * this.pixelsPerSecond;
+    const rawLeft = this.currentTime * this.pixelsPerSecond;
 
     let playhead = this.elements.tracks.querySelector<HTMLElement>(".timeline-playhead");
     if (!playhead) {
@@ -562,7 +671,7 @@ export class TimelineUI {
       playhead.addEventListener("pointerdown", (e) => this.onPlayheadPointerDown(e));
       this.elements.tracks.appendChild(playhead);
     }
-    playhead.style.left = `${left}px`;
+    playhead.style.left = `${this.headerWidthPx + rawLeft}px`;
     playhead.style.height = `${this.elements.tracks.scrollHeight}px`;
 
     // A live timecode riding along at the playhead itself — so you can
@@ -574,10 +683,10 @@ export class TimelineUI {
       liveTime.className = "timeline-ruler-live-time";
       this.elements.ruler.appendChild(liveTime);
     }
-    liveTime.style.left = `${left}px`;
-    liveTime.textContent = formatTimecode(this.currentTime, 30).slice(0, 8);
+    liveTime.style.left = `${this.headerWidthPx + rawLeft}px`;
+    liveTime.textContent = formatTimecode(this.currentTime, this.getProjectFrameRate()).slice(0, 8);
 
-    this.elements.timecode.textContent = formatTimecode(this.currentTime, 30);
+    this.elements.timecode.textContent = formatTimecode(this.currentTime, this.getProjectFrameRate());
   }
 
   private onPlayheadPointerDown(e: PointerEvent): void {
@@ -585,7 +694,7 @@ export class TimelineUI {
     e.stopPropagation();
     const onMove = (moveEvent: PointerEvent) => {
       const rect = this.elements.ruler.getBoundingClientRect();
-      const x = moveEvent.clientX - rect.left;
+      const x = moveEvent.clientX - rect.left - this.headerWidthPx;
       this.callbacks.onSeek(Math.max(0, x / this.pixelsPerSecond));
     };
     const onUp = () => {
@@ -596,17 +705,75 @@ export class TimelineUI {
     window.addEventListener("pointerup", onUp);
   }
 
-  private onRulerPointerDown(e: PointerEvent): void {
+  // Shows the time under the mouse as it moves over the ruler or a track
+  // lane, even without clicking — separate from the (red) live playhead
+  // time label, which only reflects where playback/the playhead actually
+  // is. Uses the ruler's own rect as the coordinate origin, same as every
+  // click-to-seek handler, so this always agrees with where a click here
+  // would actually land.
+  private onTimelineHover(e: PointerEvent): void {
     const rect = this.elements.ruler.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const rawX = e.clientX - rect.left;
+    const x = rawX - this.headerWidthPx;
+    if (x < 0) {
+      this.hideHoverTime();
+      return;
+    }
+    const time = x / this.pixelsPerSecond;
+    let label = this.elements.ruler.querySelector<HTMLElement>(".timeline-ruler-hover-time");
+    if (!label) {
+      label = document.createElement("div");
+      label.className = "timeline-ruler-hover-time";
+      label.innerHTML = '<div class="timeline-ruler-hover-time-main"></div><div class="timeline-ruler-hover-time-sub"></div>';
+      this.elements.ruler.appendChild(label);
+    }
+    label.style.left = `${rawX}px`;
+    label.style.display = "flex";
+    const clamped = Math.max(0, time);
+    const hours = Math.floor(clamped / 3600);
+    const minutes = Math.floor((clamped % 3600) / 60);
+    const seconds = Math.floor(clamped % 60);
+    const ms = Math.floor((clamped % 1) * 1000);
+    const main = label.querySelector<HTMLElement>(".timeline-ruler-hover-time-main");
+    if (main) {
+      main.textContent =
+        `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:` +
+        `${seconds.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+    }
+    const frame = Math.floor(clamped * this.getProjectFrameRate());
+    const sub = label.querySelector<HTMLElement>(".timeline-ruler-hover-time-sub");
+    if (sub) sub.textContent = `frame ${frame}`;
+  }
+
+  private hideHoverTime(): void {
+    const label = this.elements.ruler.querySelector<HTMLElement>(".timeline-ruler-hover-time");
+    if (label) label.style.display = "none";
+  }
+
+    private onRulerPointerDown(e: MouseEvent): void {
+    const rect = this.elements.ruler.getBoundingClientRect();
+    const x = e.clientX - rect.left - this.headerWidthPx;
     const time = Math.max(0, x / this.pixelsPerSecond);
+    this.log(
+      `[scrub] ruler ${e.type} at x=${x.toFixed(1)}px -> t=${time.toFixed(3)}s (playhead was ${this.currentTime.toFixed(3)}s)`,
+    );
     this.callbacks.onSeek(time);
   }
 
-  private onScrubPointerDown(e: PointerEvent): void {
-    const rect = this.elements.tracks.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+  private onScrubPointerDown(e: MouseEvent): void {
+    // Must match the ruler's own coordinate origin, not the tracks
+    // container's — .timeline-tracks includes each row's 132px
+    // .timeline-track-header column (position: sticky; left: 0) in its
+    // bounding rect, but the ruler sits only above the lane content. Using
+    // tracks' rect here added ~132px of unsubtracted offset to every
+    // click-to-seek in a track lane, landing the seek noticeably later
+    // than where you actually clicked.
+    const rect = this.elements.ruler.getBoundingClientRect();
+    const x = e.clientX - rect.left - this.headerWidthPx;
     const time = Math.max(0, x / this.pixelsPerSecond);
+    this.log(
+      `[scrub] lane ${e.type} at x=${x.toFixed(1)}px -> t=${time.toFixed(3)}s (playhead was ${this.currentTime.toFixed(3)}s)`,
+    );
     this.callbacks.onSeek(time);
   }
 
@@ -783,12 +950,14 @@ export class TimelineUI {
         `Trimmed clip ${shortId} (${drag.mode}): start ${fmt(drag.startTimeAtDragStart)}s->${fmt(drag.draftStartTime)}s, duration ${fmt(drag.durationAtDragStart)}s->${fmt(drag.draftDuration)}s`,
       );
       this.afterMutation();
+      this.logTrackState(drag.trackId, "Trim result");
     } else if (startChanged) {
       const ok = await this.runAction(
         makeAction("clip/move", { clipId: drag.clipId, startTime: drag.draftStartTime }),
       );
       if (ok) {
         this.log(`Moved clip ${shortId}: start ${fmt(drag.startTimeAtDragStart)}s->${fmt(drag.draftStartTime)}s`);
+        this.logTrackState(drag.trackId, "Move result");
       }
     } else {
       const trimParams =
@@ -800,6 +969,7 @@ export class TimelineUI {
         this.log(
           `Trimmed clip ${shortId} (${drag.mode}): duration ${fmt(drag.durationAtDragStart)}s->${fmt(drag.draftDuration)}s`,
         );
+        this.logTrackState(drag.trackId, "Trim result");
       }
     }
   }
@@ -995,7 +1165,7 @@ export class TimelineUI {
     splitBtn.addEventListener("click", () => {
       const t = this.currentTime;
       void this.runAction(makeAction("clip/split", { clipId: clip.id, time: t })).then((ok) => {
-        if (ok) this.log(`Split clip ${clip.id.slice(0, 8)} at ${t.toFixed(2)}s`);
+        if (ok) this.logSplitResult(clip.trackId, t);
       });
     });
 
@@ -1137,7 +1307,7 @@ export class TimelineUI {
           if (clip && this.currentTime > clip.startTime && this.currentTime < clip.startTime + clip.duration) {
             const t = this.currentTime;
             void this.runAction(makeAction("clip/split", { clipId: clip.id, time: t })).then((ok) => {
-              if (ok) this.log(`Split clip ${clip.id.slice(0, 8)} at ${t.toFixed(2)}s`);
+              if (ok) this.logSplitResult(clip.trackId, t);
             });
           }
         }

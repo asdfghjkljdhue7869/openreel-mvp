@@ -64,8 +64,7 @@ body {
 .app-layout {
   display: grid;
   gap: 16px;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
   grid-template-columns: minmax(320px, 480px) 1fr;
   grid-template-areas:
     "header   header"
@@ -370,11 +369,35 @@ input[type=color] {
   border: 1px solid var(--border);
   border-radius: 2px;
   background: var(--bg-input);
+  scrollbar-width: thin;
+}
+
+.timeline-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.timeline-scroll::-webkit-scrollbar-track {
+  background: var(--bg-input);
+}
+
+.timeline-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
 }
 
 .timeline-ruler {
   position: relative;
   height: 24px;
+  /* Must match .timeline-track-header's width below — every row's lane
+     content starts 132px in because the header is a flex sibling before
+     it, so the ruler has to start there too or its ticks (and anything
+     that treats the ruler as the click/seek coordinate origin) will be
+     132px left of the clips they're supposed to line up with. padding
+     (not margin) so this space is still part of the ruler's own paintable
+     and clickable box — margin left a gap showing .timeline-scroll's
+     background through it, and clicks there didn't hit the ruler at all.
+     JS adds/subtracts headerWidthPx everywhere this matters. */
+  padding-left: 132px;
   border-bottom: 1px solid var(--border);
   cursor: text;
   background: var(--bg-panel-raised);
@@ -650,6 +673,32 @@ input[type=color] {
   z-index: 5;
 }
 
+.timeline-ruler-hover-time {
+  position: absolute;
+  top: 1px;
+  transform: translateX(2px);
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1.3;
+  padding: 2px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.timeline-ruler-hover-time-sub {
+  font-size: 0.55rem;
+  opacity: 0.7;
+}
+
 .timeline-clip-waveform {
   position: absolute;
   inset: 0;
@@ -669,7 +718,7 @@ input[type=color] {
    point for your own mobile theme — nothing else in this file needs to
    change for the app to work, because layout lives entirely in
    .app-layout's grid-template-areas. */
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   :root {
     --tap-size: 48px; /* bigger fingers need bigger targets */
   }

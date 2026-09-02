@@ -744,67 +744,73 @@ export class MediaBunnyEngine {
     samplesPerSecond: number = 100,
   ): Promise<WaveformData> {
     this.ensureInitialized();
-    const { AudioSampleSink } = this.mediabunny!;
     const input = await this.createInput(file);
-
     try {
       const audioTrack = await input.getPrimaryAudioTrack();
       if (!audioTrack) {
         throw new Error("No audio track found");
       }
-
-      const canDecode = await audioTrack.canDecode();
-      if (!canDecode) {
-        throw new Error("Cannot decode audio track");
-      }
-
-      const sink = new AudioSampleSink(audioTrack);
-      const duration = await audioTrack.computeDuration();
-      const totalSamples = Math.ceil(duration * samplesPerSecond);
-
-      const peaks: number[] = [];
-      const rms: number[] = [];
-      const timestamps = Array.from(
-        { length: totalSamples },
-        (_, i) => i / samplesPerSecond,
-      );
-
-      for await (const sample of sink.samplesAtTimestamps(timestamps)) {
-        if (!sample) {
-          peaks.push(0);
-          rms.push(0);
-          continue;
-        }
-        const bytesNeeded = sample.allocationSize({
-          format: "f32",
-          planeIndex: 0,
-        });
-        const floats = new Float32Array(bytesNeeded / 4);
-        sample.copyTo(floats, { format: "f32", planeIndex: 0 });
-        let peak = 0;
-        let sumSquares = 0;
-        for (let i = 0; i < floats.length; i++) {
-          const abs = Math.abs(floats[i]);
-          peak = Math.max(peak, abs);
-          sumSquares += floats[i] * floats[i];
-        }
-
-        peaks.push(peak);
-        rms.push(Math.sqrt(sumSquares / floats.length));
-
-        sample.close();
-      }
-
-      return {
-        peaks: new Float32Array(peaks),
-        rms: new Float32Array(rms),
-        sampleRate: samplesPerSecond,
-        duration,
-        samplesPerSecond,
-      };
     } finally {
       input[Symbol.dispose]?.();
     }
+
+    // mediabunny's own packet demuxer (AudioSampleSink) has been observed
+    // to return a null sample for every single timestamp on some WebM
+    // files — 100% null, not an error, just silence — even though normal
+    // playback decodes that exact file's audio fine through the browser's
+    // native path. Sidestep mediabunny's demuxer entirely for waveform
+    // analysis and decode via the Web Audio API instead, since that's the
+    // same class of native decoder that already proves it can read this
+    // file — a completely different code path than mediabunny's own.
+    const arrayBuffer = await file.arrayBuffer();
+    const audioCtx = new AudioContext();
+    let audioBuffer: AudioBuffer;
+    try {
+      audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    } finally {
+      void audioCtx.close();
+    }
+
+    const duration = audioBuffer.duration;
+    const totalSamples = Math.ceil(duration * samplesPerSecond);
+    const channelCount = audioBuffer.numberOfChannels;
+    const channelData: Float32Array[] = [];
+    for (let ch = 0; ch < channelCount; ch++) {
+      channelData.push(audioBuffer.getChannelData(ch));
+    }
+    const sampleRateHz = audioBuffer.sampleRate;
+
+    const peaks = new Float32Array(totalSamples);
+    const rms = new Float32Array(totalSamples);
+    for (let i = 0; i < totalSamples; i++) {
+      const startSample = Math.floor((i / samplesPerSecond) * sampleRateHz);
+      const endSample = Math.min(
+        channelData[0]?.length ?? 0,
+        Math.floor(((i + 1) / samplesPerSecond) * sampleRateHz),
+      );
+      let peak = 0;
+      let sumSquares = 0;
+      let count = 0;
+      for (let s = startSample; s < endSample; s++) {
+        for (let ch = 0; ch < channelCount; ch++) {
+          const v = channelData[ch][s];
+          const abs = Math.abs(v);
+          if (abs > peak) peak = abs;
+          sumSquares += v * v;
+          count++;
+        }
+      }
+      peaks[i] = peak;
+      rms[i] = count > 0 ? Math.sqrt(sumSquares / count) : 0;
+    }
+
+    return {
+      peaks,
+      rms,
+      sampleRate: samplesPerSecond,
+      duration,
+      samplesPerSecond,
+    };
   }
 
   async convertMedia(
