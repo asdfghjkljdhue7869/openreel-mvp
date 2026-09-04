@@ -50,6 +50,11 @@
 
 * { box-sizing: border-box; }
 
+html {
+  background: var(--bg-app);
+  height: 100%;
+}
+
 body {
   background: var(--bg-app);
   color: var(--text-primary);
@@ -57,6 +62,7 @@ body {
   margin: 0;
   padding: 20px;
   font-size: 13px;
+  min-height: 100vh;
 }
 
 /* ============ LAYOUT ============ */

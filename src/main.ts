@@ -52,6 +52,12 @@ const setStatus = (text: string, cls: "idle" | "working" | "done" | "error") => 
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+window.addEventListener("beforeunload", (event) => {
+  if (!project) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
+
 const fileInput = $<HTMLInputElement>("fileInput");
 const canvas = $<HTMLCanvasElement>("canvas");
 const playBtn = $<HTMLButtonElement>("playBtn");
@@ -200,23 +206,6 @@ const timelineUI = new TimelineUI(
 window.addEventListener("resize", () => {
   timelineUI.render();
 });
-
-function forceRepaint(): void {
-  const el = document.body;
-  const prevDisplay = el.style.display;
-  el.style.display = "none";
-  void el.offsetHeight;
-  el.style.display = prevDisplay;
-  window.scrollBy(0, 1);
-  window.scrollBy(0, -1);
-}
-
-for (const eventName of ["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "MSFullscreenChange"]) {
-  document.addEventListener(eventName, () => {
-    forceRepaint();
-    timelineUI.render();
-  });
-}
 
 addVideoTrackBtn.addEventListener("click", () => timelineUI.addTrack("video"));
 addAudioTrackBtn.addEventListener("click", () => timelineUI.addTrack("audio"));
