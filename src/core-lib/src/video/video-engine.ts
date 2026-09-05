@@ -783,10 +783,6 @@ export class VideoEngine {
                   x: transform.position.x * scaleX,
                   y: transform.position.y * scaleY,
                 },
-                scale: {
-                  x: transform.scale.x * scaleX,
-                  y: transform.scale.y * scaleY,
-                },
               };
               let processed = compoundFrame;
               try {
@@ -959,10 +955,6 @@ export class VideoEngine {
               position: {
                 x: finalTransform.position.x * scaleX,
                 y: finalTransform.position.y * scaleY,
-              },
-              scale: {
-                x: finalTransform.scale.x * scaleX,
-                y: finalTransform.scale.y * scaleY,
               },
             };
 
